@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:daily_expense/widgets/chart.dart';
-import 'package:flutter/services.dart';
 
 import './widgets/transaction_list.dart';
 
@@ -52,12 +51,29 @@ class MyHomePage extends StatefulWidget {
   _MyHomePageState createState() => _MyHomePageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
+class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
   // String titleInput;
   // String amountInput;
   final List<Transaction> _userTransactions = [];
 
   bool _showChart = false;
+
+  void initState() {
+    WidgetsBinding.instance.addObserver(this);
+    super.initState();
+  }
+
+  @override
+  void didChangeAppLifeCycleState(AppLifecycleState state) {
+    print(state);
+  }
+
+  @override
+  dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
   List<Transaction> get _recentTransactions {
     return _userTransactions.where((tx) {
       return tx.date.isAfter(DateTime.now().subtract(Duration(days: 7)));
@@ -96,11 +112,52 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final mediaQuery = MediaQuery.of(context);
-    final isLandscape = mediaQuery.orientation == Orientation.landscape;
-    final PreferredSizeWidget appbar = Platform.isIOS
+  List<Widget> _buildLandscapeConent(
+      MediaQueryData mediaQuery, AppBar appbar, Widget txListWidget) {
+    return [
+      Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: <Widget>[
+          Text(
+            'Show Chart',
+            style: Theme.of(context).textTheme.title,
+          ),
+          Switch.adaptive(
+              activeColor: Theme.of(context).accentColor,
+              value: _showChart,
+              onChanged: (val) {
+                setState(() {
+                  _showChart = val;
+                });
+              })
+        ],
+      ),
+      _showChart
+          ? Container(
+              height: (mediaQuery.size.height -
+                      appbar.preferredSize.height -
+                      mediaQuery.padding.top) *
+                  0.7,
+              child: Chart(_recentTransactions))
+          : txListWidget
+    ];
+  }
+
+  List<Widget> _buildPortraitContent(
+      MediaQueryData mediaQuery, AppBar appbar, Widget txListWidget) {
+    return [
+      Container(
+          height: (mediaQuery.size.height -
+                  appbar.preferredSize.height -
+                  mediaQuery.padding.top) *
+              0.3,
+          child: Chart(_recentTransactions)),
+      txListWidget
+    ];
+  }
+
+  Widget _buildAppbar() {
+    return Platform.isIOS
         ? CupertinoNavigationBar(
             middle: Text('Personal Epenses'),
             trailing: Row(
@@ -121,51 +178,25 @@ class _MyHomePageState extends State<MyHomePage> {
                   onPressed: () => _startAddNewTranscation(context))
             ],
           );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mediaQuery = MediaQuery.of(context);
+    final isLandscape = mediaQuery.orientation == Orientation.landscape;
+    final PreferredSizeWidget appbar = _buildAppbar();
 
     final txListWidget = Container(
         height: (mediaQuery.size.height - appbar.preferredSize.height) * 0.7,
         child: TransactionList(_userTransactions, _deleteTransaction));
     final PageBody = SafeArea(
         child: SingleChildScrollView(
-      child: Column(
-        children: <Widget>[
-          if (isLandscape)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                Text(
-                  'Show Chart',
-                  style: Theme.of(context).textTheme.title,
-                ),
-                Switch.adaptive(
-                    activeColor: Theme.of(context).accentColor,
-                    value: _showChart,
-                    onChanged: (val) {
-                      setState(() {
-                        _showChart = val;
-                      });
-                    })
-              ],
-            ),
-          if (!isLandscape)
-            Container(
-                height: (mediaQuery.size.height -
-                        appbar.preferredSize.height -
-                        mediaQuery.padding.top) *
-                    0.3,
-                child: Chart(_recentTransactions)),
-          if (!isLandscape) txListWidget,
-          if (isLandscape)
-            _showChart
-                ? Container(
-                    height: (mediaQuery.size.height -
-                            appbar.preferredSize.height -
-                            mediaQuery.padding.top) *
-                        0.7,
-                    child: Chart(_recentTransactions))
-                : txListWidget
-        ],
-      ),
+      child: Column(children: <Widget>[
+        if (isLandscape)
+          ..._buildLandscapeConent(mediaQuery, appbar, txListWidget),
+        if (!isLandscape)
+          ..._buildPortraitContent(mediaQuery, appbar, txListWidget)
+      ]),
     ));
     return Platform.isIOS
         ? CupertinoPageScaffold(child: PageBody, navigationBar: appbar)
